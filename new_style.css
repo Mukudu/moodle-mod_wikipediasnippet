@@ -1,0 +1,140 @@
+@media screen { 
+.mw-content-rtl { 
+direction : rtl; 
+} 
+.mw-content-ltr { 
+direction : ltr; 
+} 
+.mw-content-ltr .editsection, .mw-content-rtl .mw-content-ltr .editsection { 
+float : right; 
+} 
+.mw-content-rtl .editsection, .mw-content-ltr .mw-content-rtl .editsection { 
+float : left; 
+} 
+.mw-content-ltr ul, .mw-content-rtl .mw-content-ltr ul { 
+margin : 0.3em 0 0 1.6em; 
+padding : 0; 
+} 
+.mw-content-rtl ul, .mw-content-ltr .mw-content-rtl ul { 
+margin : 0.3em 1.6em 0 0; 
+padding : 0; 
+} 
+.mw-content-ltr ol, .mw-content-rtl .mw-content-ltr ol { 
+margin : 0.3em 0 0 3.2em; 
+padding : 0; 
+} 
+.mw-content-rtl ol, .mw-content-ltr .mw-content-rtl ol { 
+margin : 0.3em 3.2em 0 0; 
+padding : 0; 
+} 
+.mw-content-ltr dd, .mw-content-rtl .mw-content-ltr dd { 
+margin-left : 1.6em; 
+margin-right : 0; 
+} 
+.mw-content-rtl dd, .mw-content-ltr .mw-content-rtl dd { 
+margin-left : 0; 
+margin-right : 1.6em; 
+} 
+.mw-content-ltr .toc ul, .mw-content-ltr #toc ul, .mw-content-rtl .mw-content-ltr .toc ul, .mw-content-rtl .mw-content-ltr #toc ul { 
+text-align : left; 
+} 
+.mw-content-rtl .toc ul, .mw-content-rtl #toc ul, .mw-content-ltr .mw-content-rtl .toc ul, .mw-content-ltr .mw-content-rtl #toc ul { 
+text-align : right; 
+} 
+.mw-content-ltr .toc ul ul, .mw-content-ltr #toc ul ul, .mw-content-rtl .mw-content-ltr .toc ul ul, .mw-content-rtl .mw-content-ltr #toc ul ul { 
+margin : 0 0 0 2em; 
+} 
+.mw-content-rtl .toc ul ul, .mw-content-rtl #toc ul ul, .mw-content-ltr .mw-content-rtl .toc ul ul, .mw-content-ltr .mw-content-rtl #toc ul ul { 
+margin : 0 2em 0 0; 
+} 
+#toc #toctitle, .toc #toctitle, #toc .toctitle, .toc .toctitle { 
+direction : ltr; 
+text-align : center; 
+} 
+#toc, .toc, .mw-warning { 
+background-color : #f9f9f9; 
+border : 1px solid #aaa; 
+font-size : 95%; 
+padding : 5px; 
+} 
+#toc h2, .toc h2 { 
+border : none; 
+display : inline; 
+font-size : 100%; 
+font-weight : 700; 
+padding : 0; 
+} 
+#toc ul ul, .toc ul ul { 
+margin : 0 0 0 2em; 
+} 
+#toc .toctoggle, .toc .toctoggle { 
+font-size : 94%; 
+} 
+.toccolours { 
+background-color : #f9f9f9; 
+border : 1px solid #aaa; 
+font-size : 95%; 
+padding : 5px; 
+} 
+.magnify { 
+float : right; 
+} 
+div.magnify { 
+background : none !important ; 
+border : none !important ; 
+float : right; 
+} 
+div.magnify a, div.magnify img { 
+background : none !important ; 
+border : none !important ; 
+display : block; 
+} 
+.imagelist td, .imagelist th { 
+white-space : nowrap; 
+} 
+.imagelist .TablePager_col_links { 
+background-color : #eef; 
+} 
+.imagelist .TablePager_col_img_description { 
+white-space : normal; 
+} 
+.imagelist th.TablePager_sort { 
+background-color : #ccf; 
+} 
+.plainlinks a { 
+background : none !important ; 
+padding : 0 !important ; 
+} 
+div.thumb { 
+background-color : transparent; 
+margin-bottom : 0.5em; 
+width : auto; 
+} 
+div.thumbinner { 
+background-color : #f9f9f9; 
+border : 1px solid #ccc; 
+font-size : 94%; 
+overflow : hidden; 
+padding : 3px !important ; 
+text-align : center; 
+} 
+html .thumbimage { 
+border : 1px solid #ccc; 
+} 
+html .thumbcaption { 
+border : none; 
+font-size : 94%; 
+line-height : 1.4em; 
+padding : 3px !important ; 
+text-align : left; 
+} 
+div.tright { 
+margin : 0.5em 0 1.3em 1.4em; 
+} 
+div.tleft { 
+margin : 0.5em 1.4em 1.3em 0; 
+} 
+img.thumbborder { 
+border : 1px solid #ddd; 
+} 
+} 
