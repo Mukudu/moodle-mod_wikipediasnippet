@@ -1,12 +1,12 @@
 <?php
    /***************************************************************/
    /* PhpCache - a class for caching arbitrary data
-   
+
       Software License Agreement (BSD License)
-   
+
       Copyright (C) 2005-2007, Edward Eliot.
       All rights reserved.
-      
+
       Redistribution and use in source and binary forms, with or without
       modification, are permitted provided that the following conditions are met:
 
@@ -15,8 +15,8 @@
          * Redistributions in binary form must reproduce the above copyright
            notice, this list of conditions and the following disclaimer in the
            documentation and/or other materials provided with the distribution.
-         * Neither the name of Edward Eliot nor the names of its contributors 
-           may be used to endorse or promote products derived from this software 
+         * Neither the name of Edward Eliot nor the names of its contributors
+           may be used to endorse or promote products derived from this software
            without specific prior written permission of Edward Eliot.
 
       THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDER AND CONTRIBUTORS "AS IS" AND ANY
@@ -34,22 +34,22 @@
       Now allows a prefix to be given to the cached file's name.
       Also keeps cached data in memory for the script's duration so that
       re-requesting it on the same page does not incur a reload of the file.
-   
+
       Last Updated:  23rd March 2008
    /***************************************************************/
-   
-   define('CACHE_PATH', $_SERVER['DOCUMENT_ROOT'].'/moodle/cache/');			//changed by Ben Ellis March 2012 for use with Moodle Plugin
-   
+
+   define('CACHE_PATH', $_SERVER['DOCUMENT_ROOT'].'/moodle22/mod/wikipediasnippet/cache');            //changed by Ben Ellis March 2012 for use with Moodle Plugin
+
    class PhpCache {
       var $sFile;
       var $sFileLock;
       var $iCacheTime;
-      
+
       var $sShortKey;
       static $aCache = array();
-      
+
       /**
-       * @param $sPrefix    Allows an extra string to be prepended to the 
+       * @param $sPrefix    Allows an extra string to be prepended to the
        *                    MD5ed filename to allow for easy identification
        *                    between cached types.
        **/
@@ -59,7 +59,7 @@
          $this->sFileLock = "$this->sFile.lock";
          $iCacheTime >= 0 ? $this->iCacheTime = $iCacheTime : $this->iCacheTime = 0;
       }
-      
+
       function Check() {
          if ( array_key_exists( $this->sShortKey, self::$aCache ) ) {
            return true;
@@ -67,11 +67,11 @@
          if (file_exists($this->sFileLock)) return true;
          return (file_exists($this->sFile) && ($this->iCacheTime == -1 || time() - filemtime($this->sFile) <= $this->iCacheTime));
       }
-      
+
       function Exists() {
          return (array_key_exists( $this->sShortKey, self::$aCache )) || (file_exists($this->sFile) || file_exists($this->sFileLock));
       }
-      
+
       function Set($vContents) {
          if (!file_exists($this->sFileLock)) {
             if (file_exists($this->sFile)) {
@@ -85,10 +85,10 @@
             }
             self::$aCache[$this->sShortKey] = $vContents;
             return true;
-         }     
+         }
          return false;
       }
-      
+
       function Get() {
          if (array_key_exists( $this->sShortKey, self::$aCache )) {
             return self::$aCache[$this->sShortKey];
@@ -102,7 +102,7 @@
             return $temp;
          }
       }
-      
+
       function ReValidate() {
          touch($this->sFile);
       }

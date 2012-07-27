@@ -11,48 +11,40 @@
     using xml format due to protability - php formats proving unreliable - especially serialisation
 
 
-    TODO : CACHING
-
 */
-
-define('USERAGENT','Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.1.9) Gecko/20071025 Firefox/2.0.0.9');
-// toc      = http://en.wikipedia.org/w/api.php?action=parse&prop=sections&format=xml&page=Seychelles
-// preamble = http://en.wikipedia.org/w/api.php?format=xml&action=query&rvprop=content&prop=revisions&titles=Greece&rvsection=0 + regex
-// infobox  = http://en.wikipedia.org/w/api.php?format=xml&action=query&rvprop=content&prop=revisions&titles=Greece&rvsection=0 + regex
-
-define('API_CONTENT_URL', 'http://en.wikipedia.org/w/api.php?format=xml&action=query&rvprop=content&prop=revisions');
-define('API_HTMLCONTENT_URL', 'http://en.wikipedia.org/w/api.php');
-define('API_TOC_URL','http://en.wikipedia.org/w/api.php?action=parse&prop=sections&format=xml&page=');
-define('WIKI_CONTENT_URL','http://en.wikipedia.org/wiki/');
-define('CACHE_TIME', (60 * 60 * 24 * 10)); // 10 Days default - raw is url#fragment html is url+'noimages=?'+'nolinks=?'+#fragment - make it 0 for no caching
 
 require_once('PhpCache.php');               //caching library
 
 class WikipediaSnippet {
 
     private $debugging = 0;
-    private $cachingenabled = false;
+    private $cachingenabled = true;
 
-    public $title = '';
-    public $rawtitle = '';
+    // defaults
+    //private $cachetime = 864000; //(60*60*24*10) = 10 days
+    private $cachetime = 0; //0 days
+    private $useragent = 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.1.9) Gecko/20071025 Firefox/2.0.0.9';
+    private $http_proxy = '';
+    private $wiki_api_url ='http://en.wikipedia.org/w/api.php';
+    private $rawoutput = false;
+
+    // content stuff
+    private $content = '';
+    private $wiki_content_url = '';
+    private $rawtitle = '';
+    private $title = '';
+    private $pageid = 0;
+    private $snippets = array();         // including infobox, preamble, #sections
+    private $toc = '';
+
     public $url = '';
-    public $pageid = 0;
-    public $snippets = array();         // including infobox, preamble, #sections
-    public $toc = '';
-
-    //below need to become private and are to accessed via access methods
-    public $rawoutput = false;
-    public $content = '';
+    public $redirected = false;         //has this been redirected
     public $error = '';
-
 
     // create a wikipedia snippet object
     // pass in the wikipedia url
     function __construct() {
         //do nothing we should be set up OK.
-        if (CACHE_TIME !== 0) {
-            $this->cachingenabled = true;
-        }
 
     }
 
@@ -62,14 +54,56 @@ class WikipediaSnippet {
 
     //determine if the caller just wants wiki text or xml in the case of the toc
     public function setRawOutput($otype = false) {
+        if ($this->debugging) error_log("Setting Raw output to '$otype'");
         $this->rawoutput = $otype;
     }
+
+    //set up caching - some crazy stuff being done by PHP when passing 0
+    public function setCaching($time) {
+        $time = (int) $time;        //now make sure it is an integer
+
+        if ($time) {
+            if ($this->debugging) error_log("Caching is being enabled - ttl = $time");
+            $this->cachingenabled = true;
+            $this->cachetime = $time;
+        }else{
+            if ($this->debugging) error_log('Caching is being disable');
+            $this->cachingenabled = false;
+            $this->cachetime = 0;
+        }
+
+    }
+
+    //set a different user agent - if no setting - current remains in force
+    public function setUserAgent($useragent) {
+        if ($useragent) {
+            if ($this->debugging) error_log('Useragent is being reset to ' . $useragent);
+            $this->useragent = $useragent;
+        }
+    }
+
+    // set a proxy for curl requests - if empty proxy is unset
+    public function setProxy($proxy) {
+        if ($this->debugging && $proxy) error_log("Proxy being set to '$proxy'");
+        $this->http_proxy = $proxy;     //if empty proxy is unset
+    }
+
+    //set the wiki API url - if not set current satys in force
+    public function setWikiAPI_URL($wiki_api) {
+        if ($wiki_api) {
+            if ($this->debugging) error_log("Wiki API URL set to '$wiki_api'");
+            $this->wiki_api_url = $wiki_api;
+        }
+    }
+
+    //private $wiki_content_url = 'http://en.wikipedia.org/wiki/';
+
 
     public function getWikiContent($url, $nolinks=false, $noimages=false) {
         $noerror = true;
         $result = '';
 
-        if ($this->debugging) error_log('DEBUG mode - switch switch off in production environments');
+       if ($this->debugging) error_log('DEBUG mode - please switch off in production environments');
 
         $webaddress = parse_url($url);   //break up the url into parts - scheme - e.g. http ,host,port,user,pass,path,query - after the question mark ?,fragment - after the hashmark
 
@@ -85,8 +119,14 @@ class WikipediaSnippet {
             $this->rawtitle = basename($webaddress['path']);
             if ($this->debugging) error_log('Raw Title computed to be ' . $this->rawtitle);
 
-            $this->url = $webaddress['scheme'].'://'.$webaddress['host'].$webaddress['path'];
+            //more url stuff for later
+            $baseurl = $webaddress['scheme'].'://'.$webaddress['host'];
+            $this->wiki_content_url = $baseurl . pathinfo($webaddress['path'],PATHINFO_DIRNAME) . '/';
+            if ($this->debugging) error_log('Wiki Content URL determined to be ' . $this->wiki_content_url);
+            $this->url = $baseurl . $webaddress['path'];
+            if ($this->debugging) error_log('Request URL determined to be ' . $this->url);
 
+            //output
             $type = 'html';
             if ($this->rawoutput) $type = 'raw';
 
@@ -104,7 +144,7 @@ class WikipediaSnippet {
                 $cacheurl = $this->url. '?' . join('&',$cacheparams) . '#' .$webaddress['fragment'];
 
             }else{
-                $cacheurl = $url;
+                $cacheurl = $url. '#' .$webaddress['fragment'];
             }
 
             //check in cache
@@ -116,15 +156,28 @@ class WikipediaSnippet {
 
                 //use the toc to determine the section we want if not the toc itself
                 if ($webaddress['fragment'] != 'toc') {                     //is this the toc?
-                    if (!$section=$toc[$webaddress['fragment']]) {          //if not, then we want a valid sestion
-                        // otherwise check for special fragments or no toc sections
-                        if ($webaddress['fragment'] == 'infobox' || $webaddress['fragment'] == 'preamble' && (count($toc) == 0)) {
-                            $section = 0;
+                    if ($webaddress['fragment'] == 'infobox' || $webaddress['fragment'] == 'preamble') {
+                        $section = 0;
+                    }else if (count($toc) == 0) {           //catches redirects as well
+                        $section = 0;
+                    }else{
+                        if (!$section=$toc[$webaddress['fragment']]) {          //if not, then we want a valid section
+                            $section = $toc[strtolower($webaddress['fragment'])];       //this should never have to happen
                         }
                     }
 
                     // create the request URL for the wikipedia API
-                    $geturl = API_CONTENT_URL . '&titles=' . $this->rawtitle . "&rvsection=$section";
+                    // API_CONTENT_URL . '&titles=' . $this->rawtitle . "&rvsection=$section";
+                    $cparams = array();
+                    $cparams['format'] = 'xml';
+                    $cparams['titles'] = $this->rawtitle;
+                    $cparams['rvsection'] = $section;
+                    $cparams['action'] = 'query';
+                    $cparams['prop'] = 'revisions';
+                    $cparams['rvprop'] = 'content';
+                    $cparams['redirects'] = '';             //resolve redirects automatically
+                    $geturl = $this->_makeWikiAPIcall($cparams);
+
                     if ($this->debugging) error_log("Content API call being made to '$geturl'");
 
                     if ($response = $this->_getWikiPage($geturl)) {             //make the call
@@ -149,6 +202,7 @@ class WikipediaSnippet {
 
                             $result = $response->query->pages->page->revisions->rev;
 
+                            //redirects should not happen according to the docs if you call with redirects param
                             //TODO Deal with Section 0 in raw form
                             if ($section == 0) {
                                 //not doing this by regex - too bloody hard
@@ -182,39 +236,30 @@ class WikipediaSnippet {
 
                             //process raw wiki content here
                             if (!$this->rawoutput) {
-                                //we want html and we will ask wikipedia to do the work for us
-                                //?format=xml&action=parse&text=
 
-                                //this taken out to handle post encoding for wikipedia
-    //                          $fields = array(
-    //                              'action' => 'parse',
-    //                              'prop' => 'text',
-    //                              'format' => 'xml',              //undocumented on the wikimedia site
-    //                              'text' => urlencode($result),
-    //                          );
+                                $txtparams = array();
+                                $txtparams['format'] = 'xml';
+                                $txtparams['action'] = 'parse';
+                                $txtparams['prop'] = 'text';
+                                $txtparams['text'] = urlencode($result);
+                                $txtparams['redirects'] = '';   //handle redirects
 
-                                $newfields = 'action=parse&prop=text&format=xml&text='.urlencode($result);
-                                $response= $this->_response2XML($this->_getWikiPage(API_HTMLCONTENT_URL,$newfields));
+                                $response= $this->_response2XML($this->_getWikiPage($this->_makeWikiAPIcall($txtparams),true));
 
                                 //extract the html and unencode it
                                 $result = html_entity_decode($response->parse->text);
 
                                 $result = $this->_CleanupHTML($result);
-                                //cache the html if we have had
+
                             }
-                            $this->content = $result;  //we're done
                         }
                     }
                 }else{
                     // we deal with toc stuff here
                     if (!empty($toc)) {         //we have a valid table of contents
-                        //TODO turn $toc into html for our caller
                         // would love to let wikpedia do all the hard work but html tocs are not returned
-
-                        //so here goes
                         $toc_html = array();
 
-                        ///// BEN FIX THIS CODE /////
                         if ($toc_obj = $this->_response2XML($this->toc)) {          // get a copy
                              //now we make it into a php array for later code
                              //<s toclevel="1" level="2" line="History" number="1" index="1" fromtitle="Seychelles" byteoffset="4678" anchor="History"/>
@@ -250,18 +295,42 @@ class WikipediaSnippet {
                         }
                         $result = implode("\n",$toc_html);
                     }else{
-                        $this->_raiseError('There does not appear to be a table of contents on this page');
+                        //let check if we have a redirect scenario
+                        //echo htmlentities($this->toc);
+                        //most wikipedia pages do have a table of contents f only the references section
+                        // can assume tghis is a redirection
+                        $this->_raiseError('There does not appear to be a table of contents on this page - it may require redirection');
                     }
                 }
+
                 //
                 //cache the results  - raw and html - this is the specific stuff
                 //
                 if ($result) {
                     $this->_cache_page($cacheurl,$type,$result);
+                    $this->content = $result;  //we're done        DO WE NEED THIS
                 }
             }
         }
+
         return $result;
+    }
+
+    //this one creates the API URL
+    private function _makeWikiAPIcall(array $parms) {
+        $qrystr = '';
+        //join the params
+        foreach ($parms as $key => $val) {
+            if ($qrystr) {
+                $qrystr .= '&';
+            }
+            if ($val) {
+                $qrystr .= "$key=$val";
+            }else{
+                $qrystr .= $key;        //handles &redirects
+            }
+        }
+        return($this->wiki_api_url . '?' . $qrystr);
     }
 
     //
@@ -274,7 +343,13 @@ class WikipediaSnippet {
 
         //fixup all intenenal wikpedia links
         $hrefpattern = '¬/wiki/¬i';
-        $html = preg_replace($hrefpattern, WIKI_CONTENT_URL, $html);
+        $html = preg_replace($hrefpattern, $this->wiki_content_url, $html);
+
+        //just in case we messed up another wiki's links
+        //http://en.wikipedia.orghttp//en.wikipedia.org/wiki/Help:Cite_errors/Cite_error_refs_without_references
+
+        //remove any citations - links would not work without citations being added
+        //<sup id="cite_ref-0" class="reference"><a target="blank" href="#cite_note-0"><span>[</span>1<span>]</span></a></sup>
 
         //fix up all links - open in new window
         $html =  preg_replace('¬<a href¬i','<a target="blank" href',$html);
@@ -288,9 +363,16 @@ class WikipediaSnippet {
     //
     private function _CleanupRaw($wikitext,$nolinks,$noimages) {
 
-        //remove all the ref stuff - will removes citations embedded in those tags
-        $wikitext= preg_replace('¬<ref(.*?)</ref>¬i','',$wikitext);
-        $wikitext= preg_replace('¬<ref(.*?)/>¬i','',$wikitext);
+        //remove any {{.+}} stuff in raw output
+        $wikitext= preg_replace('¬{{.+}}¬Us','',$wikitext);
+
+        //remove all the ref stuff - will removes references to page reference section embedded in those tags
+        $wikitext= preg_replace('¬<ref(.+)</ref>¬iUs','',$wikitext);
+        $wikitext= preg_replace('¬<ref(.+)/>¬iUs','',$wikitext);
+
+        //remove any citations references e.g.
+        //<sup id="cite_ref-0" class="reference"><a target="blank" href="#cite_note-0"><span>[</span>1<span>]</span></a></sup>
+        $wikitext= preg_replace('¬<sup.+</sup>¬iUs','',$wikitext);
 
         // images
         $images = array();
@@ -342,7 +424,7 @@ class WikipediaSnippet {
             if (count($images)) {
                 for ($i = 0; $i < count($images); $i++) {
                     $token = '$IMAGE_'.$i.'$';
-                    $wikitext=str_replace($token,$images[$i],$wikitext);
+                    $wikitext=str_replace($token,implode(' ',$images[$i]),$wikitext);
                 }
             }
 
@@ -365,7 +447,6 @@ class WikipediaSnippet {
                     error_log(print_r($xml_errs,true));
                 }else{
                     $this->_raiseError('Undefined error parsing response');
-                    if ($this->debugging) error_log($msg);
                 }
             }
         }
@@ -376,7 +457,7 @@ class WikipediaSnippet {
     }
 
 
-    // function to report Errors
+    // function to raise Errors
     private function _raiseError($errmsg) {
         $this->error=$errmsg;
         if ($this->debugging) error_log($errmsg);
@@ -393,64 +474,60 @@ class WikipediaSnippet {
         $type = 'toc';
 
         if (!$tocxml = $this->toc) {                    //see if we have it already
-            $toc_url = API_TOC_URL . $this->rawtitle;
+            //toc params
+            $tocparms = array();
+            $tocparms['format'] = 'xml';
+            $tocparms['action'] = 'parse';
+            $tocparms['prop'] = 'sections';
+            $tocparms['page'] = $this->rawtitle;
+            $tocparms['redirects'] = '';
+            $toc_url = $this->_makeWikiAPIcall($tocparms);
+
             if (!$tocxml = $this->_cache_get($url,$type)) {     //check in cache
                 //if not let's get from wikipedia
                 // toc      = http://en.wikipedia.org/w/api.php?action=parse&prop=sections&format=xml&page=Seychelles
                 if ($this->debugging) error_log("API call being made to '$toc_url'");
 
+
                 if ($tocxml = $this->_getWikiPage($toc_url)) {
                     //raw content is wrapped in xml
+                    $this->toc = $tocxml;
+                    //cache our xml
+                    $this->_cache_page($url,$type,$tocxml);
+
+                    //error_log($tocxml);
+
                     if ($this->debugging) error_log("Non Error response returned, XML being turned into object");
 
                     if ($toc_obj = $this->_response2XML($tocxml)) {
-                        //here we check that we infact have a reasonable response
-                        //usually errors will have no setions and the title will be different
-                        if (count($toc_obj->parse->sections->s) == 0) && ($toc_obj->parse->attributes['title'] != $this->rawtitle) {
-                            //fix the title and url
-                            $this->rawtitle = $toc_obj->parse->attributes['title'];
-                            $toc_url = API_TOC_URL . $this->rawtitle;
+                         foreach ($toc_obj->parse->sections->s as $section) {
+                             $anchor = '';
+                             $xindex = 0;  //catch any errors
+                             foreach ($section->attributes() as $a => $b) {
+                                 switch (strtolower($a)) {
+                                     case 'anchor':
+                                        $anchor = $b;
+                                        break;
+                                     case 'index':
+                                        $xindex = $b;
+                                        break;
+                                 }
 
-                            if ($this->debugging) error_log("Error in response - title is now ".$this->rawtitle ."' attempting to correct.");
-                            //try and get corrected page - breaks everything if it fails
-                            $toc_obj = $this->_response2XML($tocxml = $this->_getWikiPage($toc_url));
-                        }
-
-                         if ($toc_obj) {
-                            //now we make it into a php array for later code
-                             //<s toclevel="1" level="2" line="History" number="1" index="1" fromtitle="Seychelles" byteoffset="4678" anchor="History"/>
-
-                             foreach ($toc_obj->parse->sections->s as $section) {
-                                 $anchor = '';
-                                 $xindex = 0;  //catch any errors
-                                 foreach ($section->attributes() as $a => $b) {
-                                     switch (strtolower($a)) {
-                                         case 'anchor':
-                                            $anchor = $b;
-                                            break;
-                                         case 'index':
-                                            $xindex = $b;
-                                            break;
-                                     }
-
-                                     if ($anchor && $xindex) {
-                                         $toc_list["$anchor"] = "$xindex";
-                                         break;
-                                     }
+                                 if ($anchor && $xindex) {
+                                     $toc_list["$anchor"] = "$xindex";
+                                     break;
                                  }
                              }
-                            $this->toc = $toc_obj;
-                            //cache our xml
-                            $this->_cache_page($url,$type,$tocxml);
-                        }else{
-                            if ($this->debugging) error_log("Error - XML Object not defined");
-                        }
+                         }
                     }
+
+
+                }else{
+                    if ($this->debugging) error_log('TOC XML has not been returned by request');
                 }
             }
         }
         return $toc_list;
-
     }
 
     //
@@ -463,6 +540,7 @@ class WikipediaSnippet {
             $this->debugging=false;
         }
     }
+
     // function to retrieve wikipedia responses
     // $type can be html,toc, or raw
     private function _cache_get($url,$type) {
@@ -470,7 +548,7 @@ class WikipediaSnippet {
         $result = '';
 
         if ($this->cachingenabled) {            //if caching is on
-            $cache = new PhpCache( $url, CACHE_TIME, $type );
+            $cache = new PhpCache( $url, $this->cachetime, $type );
             if ( $cache->check() ) {
                 if ($this->debugging) error_log("Content found in cache - returning");
                 $result = $cache->get();
@@ -491,7 +569,7 @@ class WikipediaSnippet {
 
         if ($this->cachingenabled) {            //if caching is on
             if ($this->debugging) error_log("Caching results");
-            $cache = new PhpCache( $url, CACHE_TIME, $type );
+            $cache = new PhpCache( $url, $this->cachetime, $type );
             $cache->set(
                 array(
                     'url'=>$url,
@@ -505,8 +583,12 @@ class WikipediaSnippet {
     //
     // function to get the page from wikipedia and check for errors before returning xml object
     //
-    private function _getWikiPage($url,$postFields='') {
-        return(_getPagefromWikimedia($url,$postFields));
+    private function _getWikiPage($url,$post=false) {
+        $postFields = '';
+        if ($post) {        //if HTTP POST required - split the URL for the cURL lib
+            list($url,$postFields) = explode('?',$url);
+        }
+        return($this->_getPagefromWikimedia($url,$postFields));
     }
 
 
@@ -514,18 +596,17 @@ class WikipediaSnippet {
     //  function to get the raw content from wikipedia
     //
     private function _getPagefromWikimedia($url,$postFields='') {
-
         if ($this->debugging) error_log("Making cURL HTTP Request");
         $session = curl_init($url);
 
         curl_setopt( $session, CURLOPT_URL, $url );
-        curl_setopt( $session, CURLOPT_USERAGENT, USERAGENT);               //wikipedia insists on a useragent
+        curl_setopt( $session, CURLOPT_USERAGENT, $this->useragent);               //wikipedia insists on a useragent
         curl_setopt( $session, CURLOPT_HEADER, false );
 
         //if we need to set a proxy.check in the environment
-//      if (HTTPPROXY) {
-            curl_setopt( $session, CURLOPT_PROXY, '128.243.253.109:8080');
-//      }
+        if ($this->http_proxy) {
+            curl_setopt( $session, CURLOPT_PROXY, $this->http_proxy);
+        }
 
         curl_setopt( $session, CURLOPT_RETURNTRANSFER, 1 );
         if (!empty($postFields)) {
@@ -553,11 +634,6 @@ class WikipediaSnippet {
 
         return $result;
     }
-
 }
-
-
-
-
 
 ?>
