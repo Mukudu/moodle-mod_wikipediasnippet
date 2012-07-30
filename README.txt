@@ -6,7 +6,7 @@ You must have access to the server containing Moodle. This can be direct access,
 
 INSTALLATION
 ============
-1.  Latest version of the zipped file for this plug is available from git://
+1.  Latest version of the zipped file for this plug is available from https://github.com/bencellis/moodle-mod_wikipediasnippet
 
 2.  Unzip the zipped file somewhere on your local computer
 
