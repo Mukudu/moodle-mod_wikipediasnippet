@@ -64,33 +64,26 @@ class mod_wikipediasnippet_mod_form extends moodleform_mod {
         //-------------------------------------------------------------------------------
         // Adding the rest of wikipediasnippet settings
         $mform->addElement('header', 'specific', get_string('ws_formsection', 'wikipediasnippet'));
-        
-// 		$mform->addElement('hidden', 'ws_id', $this->_customdata['ws_id']);	    // must have a courseid so we can return to this page
-// 		$mform->addElement('hidden', 'courseid', $this->_customdata['courseid']);	    // must have a courseid so we can return to this page
-        
-		//wikipedia url
-        $mform->addElement('text', 'wikiurl', get_string('wikis_url', 'wikipediasnippet'), array('size'=>'80'));			//wikipedia url
-	    $mform->setDefault('wikiurl', $this->_customdata['wikiurl']);
-	    $mform->setType('wikiurl', PARAM_URL);
+
+        //wikipedia url
+        $mform->addElement('text', 'wikiurl', get_string('wikis_url', 'wikipediasnippet'), array('size'=>'80'));            //wikipedia url
+        $mform->setDefault('wikiurl', $this->_customdata['wikiurl']);
+        $mform->setType('wikiurl', PARAM_URL);
         $mform->addRule('wikiurl', null, 'required', null, 'client');
         $mform->addElement('static', 'label1', '', get_string('wikis_url_help', 'wikipediasnippet'));
-        
+
         //include images???
-        $mform->addElement('checkbox', 'noimages', get_string('wikis_excludeImages', 'wikipediasnippet'));			//wikipedia url
-	    $mform->setDefault('noimages', $this->_customdata['noimages']);
-	    $mform->setType('noimages', PARAM_INT);
-        $mform->addElement('static', 'label2', '', get_string('wikis_excludeImages_help', 'wikipediasnippet'));        
-        
+        $mform->addElement('checkbox', 'noimages', get_string('wikis_excludeImages', 'wikipediasnippet'));          //wikipedia url
+        $mform->setDefault('noimages', $this->_customdata['noimages']);
+        $mform->setType('noimages', PARAM_INT);
+        $mform->addElement('static', 'label2', '', get_string('wikis_excludeImages_help', 'wikipediasnippet'));
+
         //include links???
-        $mform->addElement('checkbox', 'nolinks', get_string('wikis_excludeLinks', 'wikipediasnippet'));			//wikipedia url
-	    $mform->setDefault('nolinks', $this->_customdata['nolinks']);
-	    $mform->setType('nolinks', PARAM_INT);
-        $mform->addElement('static', 'label3', '', get_string('wikis_excludeLinks_help', 'wikipediasnippet'));        
-        
-        
-        //a div for a preview???
-        
-        
+        $mform->addElement('checkbox', 'nolinks', get_string('wikis_excludeLinks', 'wikipediasnippet'));            //wikipedia url
+        $mform->setDefault('nolinks', $this->_customdata['nolinks']);
+        $mform->setType('nolinks', PARAM_INT);
+        $mform->addElement('static', 'label3', '', get_string('wikis_excludeLinks_help', 'wikipediasnippet'));
+
         //-------------------------------------------------------------------------------
         // add standard elements, common to all modules
         $this->standard_coursemodule_elements();

@@ -10,71 +10,76 @@
 
 require_once('lib/wikipediasnippet.inc.php');
 
-//$url = 'http://en.wikipedia.org/wiki/Australia#Religion';
-$url = "http://en.wikipedia.org/wiki/St._Chad%27s_Cathedral,_Birmingham#History";
+if ( isset($_POST['snipaddr']) && $url = $_POST['snipaddr'] ) {
+    $wikisnippet = new WikipediaSnippet();
 
-//$url = 'http://en.wikipedia.org/wiki/World_War_II#Background';     //DIRECT
-//$url = 'http://en.wikipedia.org/wiki/World_War_II#toc';
-//$url = 'http://en.wikipedia.org/wiki/Second_world_war#Background';    //REDIRECT
-//$url = 'http://en.wikipedia.org/wiki/Second_world_war#toc';
-//$url = 'http://en.wikipedia.org/wiki/World_War_II#Citations';
-
-//$url = 'http://en.wikipedia.org/wiki/Port_Line';
-//$url = 'http://en.wikipedia.org/wiki/Port_Line#Formation';
-//$url = 'http://en.wikipedia.org/wiki/Port_Line#toc';
-
-//$url = 'http://en.wikipedia.org/wiki/Burlesque#Victorian_theatrical_burlesque';
-//$url = 'http://en.wikipedia.org/wiki/Burlesque#toc';
-
-//$url = 'http://en.wikipedia.org/wiki/Hermann_Pohlmann#toc';
-
-
-// change it to a form
-// if ( !isset($_GET['snipaddr']) || !$_GET['snipaddr'] ) {
-//     echo "die - snipaddr not given in request";
-//     die;
-// }
-
-
-$debug = true;
-$raw = false;                                //set this for reporting later
-$nolinks = false;
-$noimages = false;
-
-$wikisnippet = new WikipediaSnippet();              // want debugging
-$wikisnippet->setdebugging($debug);                                     //turn debugging on
-$wikisnippet->setRawOutput($raw);
-$wikisnippet->setProxy('128.243.253.109:8080');
-$ctime = (int) 0;
-$wikisnippet->setCaching($ctime);  //switch off caching
-
-$content = $wikisnippet->getWikiContent($url,$nolinks,$noimages);
-
-echo "===Start Of Snippet=====";
-if ($raw) echo "<pre>";
-if (!$wikisnippet->error) {
-    if (!$raw) {
-        //print out some headers
-        echo '<html><head><link rel="stylesheet"
-            href="//bits.wikimedia.org/en.wikipedia.org/load.php?debug=false&lang=en&modules=site&only=styles&skin=vector&*"
-            type="text/css" media="all" /><body>';
+    if (isset($_POST['proxy'])) {
+        $wikisnippet->setProxy($_POST['proxy']);
     }
-    if ($content) {
-        echo $content;
+
+    if (isset($_POST['debug'])) {
+        $wikisnippet->setdebugging(true);
+    }
+
+    if (isset($_POST['raw'])) {
+        $wikisnippet->setRawOutput(true);
+    }
+
+    $noimages = true;
+    if (isset($_POST['images'])) {
+        $noimages = false;
+    }
+
+    $nolinks = true;
+    if (isset($_POST['links'])) {
+        $nolinks = false;
+    }
+
+    $content = $wikisnippet->getWikiContent($url,$nolinks,$noimages);
+
+    echo "===Start Of Snippet=====";
+    if ($raw) echo "<pre>";
+    if (!$wikisnippet->error) {
+        if (!$raw) {
+            //print out some headers
+            echo '<html><head><link rel="stylesheet"
+                href="//bits.wikimedia.org/en.wikipedia.org/load.php?debug=false&lang=en&modules=site&only=styles&skin=vector&*"
+                type="text/css" media="all" /><body>';
+        }
+        if ($content) {
+            echo $content;
+        }else{
+            echo 'No content returned';
+        }
+        if (!$raw) {
+            //print out end html tags
+            echo '</body></html>';
+        }
     }else{
-        echo 'No content returned';
+        print $wikisnippet->error ."<br/>\n";
     }
-    if (!$raw) {
-        //print out end html tags
-        echo '</body></html>';
-    }
-}else{
-    print $wikisnippet->error ."<br/>\n";
+
+    if ($raw) echo "</pre>";
+
+    echo "===End Of Snippet=====";
+    exit;
 }
-
-if ($raw) echo "</pre>";
-
-echo "===End Of Snippet=====";
-
 ?>
 
+<html>
+<head>
+<title>Wikipedia Snippet Test Page</title>
+</head>
+<body>
+<h1>Wikipedia Snippet Test Page</h1>
+<form method="POST">
+Cut and paste the Wikipedia Snippet Address inclusing the anchor (#): &nbsp; <input type='text' name='snipaddr' size='50' /><br />
+<p>Enter #toc for table of contents, #preamble for the intro text and #infobox for the information box.</p>
+<p>Enter a proxy address if required by the server - format host:port: &nbsp; <input type='text' name='proxy' size='75' /><br />
+<p>Include Images &nbsp<input type='checkbox' name='images' checked /> &nbsp; Include Links <input type='checkbox' name='links' checked /></p>
+<p>Run in Debug Mode <input type='checkbox' name='debug' /> &nbsp; Debug information is written to webserver logs, not to screen.</p>
+<p>Return in Raw format <input type='checkbox' name='raw'/> &nbsp; In raw format only the wiki markup for images and links are returned, if required.</p>
+<p><input type='submit' name='submit' value="Submit"></p>
+</form>
+</body>
+</html>

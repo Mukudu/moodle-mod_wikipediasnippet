@@ -31,11 +31,19 @@
 defined('MOODLE_INTERNAL') || die();
 
 $string['pluginname'] = 'Wikipedia Snippet';
+$string['pluginadministration'] = $string['pluginname'] . ' Administration';
 $string['modulename'] = 'Wikipedia Snippet';
 $string['modulenameplural'] = 'Wikipedia Snippets';
 $string['modulename_help'] = 'The wikipediasnippet module allows course managers to include fragments of Wikipedia pages';
 $string['wikipediasnippet'] = 'wikipediasnippet';
 $string['nowikipediasnippets'] = 'No Wikipedia snippets found';
+
+$string['ws_proxyprompt'] = 'Enter the proxy address';
+$string['ws_proxyhelp'] = 'In format ipaddress:port ot host:port e.g. proxy.mydomain.com:8080';
+$string['ws_debugon'] = 'Turn debug reporting on';
+$string['ws_debugon_help'] = 'Not recommended on live servers - writes debugging information to the server\'s logs';
+$string['ws_cachetime'] = 'Enter time in hours that a snippet must be cached for';
+$string['ws_cachetime_help'] = 'Time to live for caching items - setting 0 will turn off caching - not recommended';
 
 //form stuff
 $string['wikis_Name'] = 'Name';

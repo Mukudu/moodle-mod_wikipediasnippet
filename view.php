@@ -30,8 +30,9 @@
 /// (Replace wikipediasnippet with the name of your module and remove this line)
 
 require_once(dirname(dirname(dirname(__FILE__))).'/config.php');
-require_once(dirname(__FILE__).'/lib.php');
+//require_once(dirname(__FILE__).'/lib.php');
 require_once(dirname(__FILE__).'/lib/wikipediasnippet.inc.php');
+require_once(dirname(__FILE__).'/lib/PhpCache.php');
 
 $id = optional_param('id', 0, PARAM_INT); // course_module ID, or
 $n  = optional_param('n', 0, PARAM_INT);  // wikipediasnippet instance ID - it should be named as the first character of the module
@@ -53,17 +54,11 @@ $context = get_context_instance(CONTEXT_MODULE, $cm->id);
 
 add_to_log($course->id, 'wikipediasnippet', 'view', "view.php?id={$cm->id}", $wikipediasnippet->name, $cm->id);
 
-/// Print the page header
-
+/// header info
 $PAGE->set_url('/mod/wikipediasnippet/view.php', array('id' => $cm->id));
 $PAGE->set_title(format_string($wikipediasnippet->name));
 $PAGE->set_heading(format_string($course->fullname));
 $PAGE->set_context($context);
-
-// other things you may want to set - remove if not needed
-//$PAGE->set_cacheable(false);
-//$PAGE->set_focuscontrol('some-html-id');
-//$PAGE->add_body_class('wikipediasnippet-'.$somevar);
 
 // Output starts here
 echo $OUTPUT->header();
@@ -73,34 +68,109 @@ if ($wikipediasnippet->intro) { // Conditions to show the intro can change to lo
     echo $OUTPUT->box(format_module_intro('wikipediasnippet', $wikipediasnippet, $cm->id), 'generalbox mod_introbox', 'wikipediasnippetintro');
 }
 
-// Replace the following lines with you own code
-echo $OUTPUT->heading($wikipediasnippet->name);
+$type = 'html';                         //other option would be raw
 
-$debug = true;							// want debugging??
-$wikisnippetObj = new WikipediaSnippet();				
-$wikisnippetObj->setdebugging($debug);		
-$wikisnippetObj->setRawOutput($raw);
-$content = $wikisnippetObj->getWikiContent($wikipediasnippet->wikiurl,$wikipediasnippet->nolinks,$wikipediasnippet->noimages);
+//get configuation
+$mycfg = get_config('wikipediasnippet');
 
-if (!$wikisnippetObj->error) {
-	echo $OUTPUT->container($content,'wikicontent','wcontent');			//could be used with style sheet  //<div id="wcontent" class="wikicontent">
-}else{
-	print $OUTPUT->error_text($wikisnippetObj->error);
+$wikisnippetObj = new WikipediaSnippet();
+
+if (isset($mycfg->debug_on)) {
+    $wikisnippetObj->setdebugging(true);
 }
+
+if (isset($mycfg->proxy)) {
+    $wikisnippetObj->setProxy($mycfg->proxy);
+}
+
+$ctime = 0;
+if (isset($mycfg->cachetime)) {
+    if ($mycfg->cachetime) {
+        $ctime = (int) $mycfg->cachetime;
+        $ctime = $ctime * (60*60);
+    }
+}else{
+    $ctime = (24 * (60 *60));
+}
+
+//empty content to start with
+$content = '';
+
+echo $OUTPUT->heading($wikipediasnippet->name);
+if ($ctime) {
+    // make up a caching url - this means rapid return of formatted html but alos
+    // means the potential of 5 cached objects for each url#fragment
+    list($url,$fragment) = explode('#', $wikipediasnippet->wikiurl);
+
+    if (($wikipediasnippet->nolinks) || ($wikipediasnippet->noimages)) {
+        $cacheparams = array();
+        if ($wikipediasnippet->nolinks) {
+            $cacheparams[] = 'nolinks=1';
+        }
+        if ($wikipediasnippet->noimages) {
+            $cacheparams[] = 'noimages=1';
+        }
+        $cacheurl = $url. '?' . implode('&',$cacheparams) . '#' .$fragment;
+    }else{
+        $cacheurl = $url. '#' .$fragment;
+    }
+
+    $content=wikipediasnippet_cache_get($cacheurl,$ctime, $type);
+}
+
+if (!$content) {      //if it is not in the cache
+    $content = $wikisnippetObj->getWikiContent($wikipediasnippet->wikiurl,$wikipediasnippet->nolinks,$wikipediasnippet->noimages);
+    // new content - do some caching here
+    if (!$wikisnippetObj->error) {
+        if ($ctime) {           //if we want caching
+            wikipediasnippet_cache_page($cacheurl,$ctime,$type,$content);
+        }
+    }else{
+        print_error($wikisnippetObj->error);        //exception raised
+    }
+}
+
+// the content
+echo $OUTPUT->container($content,'wikicontent','wcontent');         //could be used with style sheet  //<div id="wcontent" class="wikicontent">
 
 // Finish the page
 echo $OUTPUT->footer();
 
 
-
 /*
-
-$this->content->text .= <<<INCLUDE_STYLE
-<style type="text/css">
-<!--
-@import url("http://example.edu/gs/example.css");
--->
-</style>
-INCLUDE_STYLE;
-
+    Subroutines here
 */
+
+// function to retrieve wikipedia responses
+// $type can be html,toc, or raw
+function wikipediasnippet_cache_get($url,$cachetime,$type) {
+    $result = '';
+
+    $cache = new PhpCache( $url, $cachetime, $type );
+    if ( $cache->check() ) {
+        $result = $cache->get();
+        $result = $result['data'];
+    }
+
+    return $result;
+}
+
+//
+// function will cache an object on disk so that http subsequent calls do not
+// need to go back to wikipedia - only call this for new/replacement objects
+//
+function wikipediasnippet_cache_page($url,$cachetime,$type,$content) {
+    $noerror = true;
+
+    $cache = new PhpCache( $url, $cachetime, $type );
+    $cache->set(
+        array(
+            'url'=>$url,
+            'data'=>$content
+        )
+    );
+
+    return $noerror;
+}
+
+/* ?> */

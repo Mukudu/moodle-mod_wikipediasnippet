@@ -1,2 +1,0 @@
-http://en.wikipedia.org/w/api.php?format=xml&action=query&rvprop=content&prop=revisions&rvsection=0&titles=St._Chad%27s_Cathedral,_Birmingham
-http://en.wikipedia.org/w/api.php?action=parse&prop=sections&format=xml&page=St._Chad%27s_Cathedral,_Birmingham

@@ -13,16 +13,11 @@
 
 */
 
-require_once('PhpCache.php');               //caching library
-
 class WikipediaSnippet {
 
-    private $debugging = 0;
-    private $cachingenabled = true;
+    private $debugging = false;
 
     // defaults
-    //private $cachetime = 864000; //(60*60*24*10) = 10 days
-    private $cachetime = 0; //0 days
     private $useragent = 'Mozilla/5.0 (Windows; U; Windows NT 5.1; en-US; rv:1.8.1.9) Gecko/20071025 Firefox/2.0.0.9';
     private $http_proxy = '';
     private $wiki_api_url ='http://en.wikipedia.org/w/api.php';
@@ -58,22 +53,6 @@ class WikipediaSnippet {
         $this->rawoutput = $otype;
     }
 
-    //set up caching - some crazy stuff being done by PHP when passing 0
-    public function setCaching($time) {
-        $time = (int) $time;        //now make sure it is an integer
-
-        if ($time) {
-            if ($this->debugging) error_log("Caching is being enabled - ttl = $time");
-            $this->cachingenabled = true;
-            $this->cachetime = $time;
-        }else{
-            if ($this->debugging) error_log('Caching is being disable');
-            $this->cachingenabled = false;
-            $this->cachetime = 0;
-        }
-
-    }
-
     //set a different user agent - if no setting - current remains in force
     public function setUserAgent($useragent) {
         if ($useragent) {
@@ -88,15 +67,13 @@ class WikipediaSnippet {
         $this->http_proxy = $proxy;     //if empty proxy is unset
     }
 
-    //set the wiki API url - if not set current satys in force
+    //set the wiki API url - if not set current stays in force
     public function setWikiAPI_URL($wiki_api) {
         if ($wiki_api) {
             if ($this->debugging) error_log("Wiki API URL set to '$wiki_api'");
             $this->wiki_api_url = $wiki_api;
         }
     }
-
-    //private $wiki_content_url = 'http://en.wikipedia.org/wiki/';
 
 
     public function getWikiContent($url, $nolinks=false, $noimages=false) {
@@ -130,186 +107,164 @@ class WikipediaSnippet {
             $type = 'html';
             if ($this->rawoutput) $type = 'raw';
 
-            // make up a caching url // this means rapid return of formatted html but alos
-            // means the potential of 5 cached objects for each url#fragment
-            if (($nolinks) || ($noimages)) {
-                $cacheparams = array();
-                if ($nolinks) {
-                    $cacheparams[] = 'nolinks=1';
-                }
-                if ($noimages) {
-                    $cacheparams[] = 'noimages=1';
+            // first we need to get a table of contents
+            // this may be cached locally and so save us some time
+            $toc = $this->_get_toc($url);                   //an array that we can use in php - xml in $this->toc  // could be empty
+
+            //use the toc to determine the section we want if not the toc itself
+            if ($webaddress['fragment'] != 'toc') {                     //is this the toc?
+                if ($webaddress['fragment'] == 'infobox' || $webaddress['fragment'] == 'preamble') {
+                    $section = 0;
+                }else if (count($toc) == 0) {           //catches redirects as well
+                    $section = 0;
+                }else{
+                    if (!$section=$toc[$webaddress['fragment']]) {          //if not, then we want a valid section
+                        $section = $toc[strtolower($webaddress['fragment'])];       //this should never have to happen
+                    }
                 }
 
-                $cacheurl = $this->url. '?' . join('&',$cacheparams) . '#' .$webaddress['fragment'];
+                // create the request URL for the wikipedia API
+                // API_CONTENT_URL . '&titles=' . $this->rawtitle . "&rvsection=$section";
+                $cparams = array();
+                $cparams['format'] = 'xml';
+                $cparams['titles'] = $this->rawtitle;
+                $cparams['rvsection'] = $section;
+                $cparams['action'] = 'query';
+                $cparams['prop'] = 'revisions';
+                $cparams['rvprop'] = 'content';
+                $cparams['redirects'] = '';             //resolve redirects automatically
+                $geturl = $this->_makeWikiAPIcall($cparams);
 
+                if ($this->debugging) error_log("Content API call being made to '$geturl'");
+
+                if ($response = $this->_getWikiPage($geturl)) {             //make the call
+                    //raw content is wrapped in xml
+                    if ($this->debugging) error_log("Non Error response returned - making XML Object");
+
+                    if ($response = $this->_response2XML($response)) {          // turn the reponse into an XML object to make it easier to work with
+
+                        //check to see that our wikipedia request was good - actual title will be in .....
+
+                        //extract the page info
+                        foreach ($response->query->pages->page->attributes() as $a => $b) {
+                            switch (strtolower($a)) {
+                                case 'title':
+                                    $this->title = $b;
+                                    break;
+                                case 'pageid':
+                                    $this->pageid = $b;
+                                    break;
+                            }
+                        }
+
+                        $result = $response->query->pages->page->revisions->rev;
+
+                        //redirects should not happen according to the docs if you call with redirects param
+                        //TODO Deal with Section 0 in raw form
+                        if ($section == 0) {
+                            //not doing this by regex - too bloody hard
+                            $lines = explode("\n",$result);
+                            $content = array();
+                            $inbox = false;
+                            foreach ($lines as $line) {
+                                if (stripos( $line, '{{infobox' ) === 0) {
+                                    $inbox = true;
+                                }elseif (strpos($line,'{{') === 0) {            //ignore all other formating stuff before the preamble
+                                    continue;
+                                }elseif ($line == '}}') {                       //end infobox
+                                    if ($webaddress['fragment'] == 'infobox') {
+                                        $content[] = $line;
+                                    }
+                                    $inbox = false;
+                                    continue;
+                                }
+
+                                if (($inbox) && ($webaddress['fragment'] == 'infobox')) {
+                                    $content[] = $line;
+                                }elseif (!$inbox && ($webaddress['fragment'] != 'infobox')) {
+                                    $content[] = $line;
+                                }
+                            }
+                            $result = implode("\n",$content);
+                        }
+
+                        //here we parse out all the stuff we do not need
+                        $result = $this->_CleanupRaw($result,$nolinks,$noimages);
+
+                        //process raw wiki content here
+                        if (!$this->rawoutput) {
+
+                            $txtparams = array();
+                            $txtparams['format'] = 'xml';
+                            $txtparams['action'] = 'parse';
+                            $txtparams['prop'] = 'text';
+                            $txtparams['text'] = urlencode($result);
+                            $txtparams['redirects'] = '';   //handle redirects
+
+                            $response= $this->_response2XML($this->_getWikiPage($this->_makeWikiAPIcall($txtparams),true));
+
+                            //extract the html and unencode it
+                            $result = html_entity_decode($response->parse->text);
+
+                            $result = $this->_CleanupHTML($result);
+
+                        }
+                    }
+                }
             }else{
-                $cacheurl = $url. '#' .$webaddress['fragment'];
+                // we deal with toc stuff here
+                if (!empty($toc)) {         //we have a valid table of contents
+                    // would love to let wikpedia do all the hard work but html tocs are not returned
+                    $toc_html = array();
+
+                    if ($toc_obj = $this->_response2XML($this->toc)) {          // get a copy
+                         //now we make it into a php array for later code
+                         //<s toclevel="1" level="2" line="History" number="1" index="1" fromtitle="Seychelles" byteoffset="4678" anchor="History"/>
+                         $last_level = 1;               //keep track of toc levels
+                         $toc_html[] = '<ul>';          //start html list
+                         //$this->url
+                         foreach ($toc_obj->parse->sections->s as $section) {
+                             $linknumber = 0;
+                             $linktext = '';
+                             foreach ($section->attributes() as $a => $b) {
+                                 switch (strtolower($a)) {
+                                     case 'toclevel':
+                                        //echo "'$a' = '$b' Level is at '$last_level'<br/>\n";
+                                        if (intval($b) > $last_level) {         //start a new level list
+                                            $toc_html[] = '<ul>';
+                                        }
+                                        if (intval($b) < $last_level) {     //end old level
+                                            $toc_html[] = '</ul>';
+                                        }
+                                            $last_level = intval($b);
+                                        break;
+                                     case 'number':
+                                        $linknumber = $b;
+                                        break;
+                                     case 'anchor':
+                                        $linktext = $linktext . '<a href="'. $this->url .'#' . $b . '">' . $b . '</a>';
+                                        break;
+                                  }
+                             }
+                             $toc_html[] = "<li>$linknumber. $linktext</li>";
+                         }
+                         $toc_html[] = '</ul>';
+                    }
+                    $result = implode("\n",$toc_html);
+                }else{
+                    //let check if we have a redirect scenario
+                    //echo htmlentities($this->toc);
+                    //most wikipedia pages do have a table of contents f only the references section
+                    // can assume tghis is a redirection
+                    $this->_raiseError('There does not appear to be a table of contents on this page - it may require redirection');
+                }
             }
 
-            //check in cache
-            if (!$result=$this->_cache_get($cacheurl,$type)) {                  //if it is not in the cache
-
-                // first we need to get a table of contents
-                // this may be cached locally and so save us some time
-                $toc = $this->_get_toc($url);                   //an array that we can use in php - xml in $this->toc  // could be empty
-
-                //use the toc to determine the section we want if not the toc itself
-                if ($webaddress['fragment'] != 'toc') {                     //is this the toc?
-                    if ($webaddress['fragment'] == 'infobox' || $webaddress['fragment'] == 'preamble') {
-                        $section = 0;
-                    }else if (count($toc) == 0) {           //catches redirects as well
-                        $section = 0;
-                    }else{
-                        if (!$section=$toc[$webaddress['fragment']]) {          //if not, then we want a valid section
-                            $section = $toc[strtolower($webaddress['fragment'])];       //this should never have to happen
-                        }
-                    }
-
-                    // create the request URL for the wikipedia API
-                    // API_CONTENT_URL . '&titles=' . $this->rawtitle . "&rvsection=$section";
-                    $cparams = array();
-                    $cparams['format'] = 'xml';
-                    $cparams['titles'] = $this->rawtitle;
-                    $cparams['rvsection'] = $section;
-                    $cparams['action'] = 'query';
-                    $cparams['prop'] = 'revisions';
-                    $cparams['rvprop'] = 'content';
-                    $cparams['redirects'] = '';             //resolve redirects automatically
-                    $geturl = $this->_makeWikiAPIcall($cparams);
-
-                    if ($this->debugging) error_log("Content API call being made to '$geturl'");
-
-                    if ($response = $this->_getWikiPage($geturl)) {             //make the call
-                        //raw content is wrapped in xml
-                        if ($this->debugging) error_log("Non Error response returned - making XML Object");
-
-                        if ($response = $this->_response2XML($response)) {          // turn the reponse into an XML object to make it easier to work with
-
-                            //check to see that our wikipedia request was good - actual title will be in .....
-
-                            //extract the page info
-                            foreach ($response->query->pages->page->attributes() as $a => $b) {
-                                switch (strtolower($a)) {
-                                    case 'title':
-                                        $this->title = $b;
-                                        break;
-                                    case 'pageid':
-                                        $this->pageid = $b;
-                                        break;
-                                }
-                            }
-
-                            $result = $response->query->pages->page->revisions->rev;
-
-                            //redirects should not happen according to the docs if you call with redirects param
-                            //TODO Deal with Section 0 in raw form
-                            if ($section == 0) {
-                                //not doing this by regex - too bloody hard
-                                $lines = explode("\n",$result);
-                                $content = array();
-                                $inbox = false;
-                                foreach ($lines as $line) {
-                                    if (stripos( $line, '{{infobox' ) === 0) {
-                                        $inbox = true;
-                                    }elseif (strpos($line,'{{') === 0) {            //ignore all other formating stuff before the preamble
-                                        continue;
-                                    }elseif ($line == '}}') {                       //end infobox
-                                        if ($webaddress['fragment'] == 'infobox') {
-                                            $content[] = $line;
-                                        }
-                                        $inbox = false;
-                                        continue;
-                                    }
-
-                                    if (($inbox) && ($webaddress['fragment'] == 'infobox')) {
-                                        $content[] = $line;
-                                    }elseif (!$inbox && ($webaddress['fragment'] != 'infobox')) {
-                                        $content[] = $line;
-                                    }
-                                }
-                                $result = implode("\n",$content);
-                            }
-
-                            //here we parse out all the stuff we do not need
-                            $result = $this->_CleanupRaw($result,$nolinks,$noimages);
-
-                            //process raw wiki content here
-                            if (!$this->rawoutput) {
-
-                                $txtparams = array();
-                                $txtparams['format'] = 'xml';
-                                $txtparams['action'] = 'parse';
-                                $txtparams['prop'] = 'text';
-                                $txtparams['text'] = urlencode($result);
-                                $txtparams['redirects'] = '';   //handle redirects
-
-                                $response= $this->_response2XML($this->_getWikiPage($this->_makeWikiAPIcall($txtparams),true));
-
-                                //extract the html and unencode it
-                                $result = html_entity_decode($response->parse->text);
-
-                                $result = $this->_CleanupHTML($result);
-
-                            }
-                        }
-                    }
-                }else{
-                    // we deal with toc stuff here
-                    if (!empty($toc)) {         //we have a valid table of contents
-                        // would love to let wikpedia do all the hard work but html tocs are not returned
-                        $toc_html = array();
-
-                        if ($toc_obj = $this->_response2XML($this->toc)) {          // get a copy
-                             //now we make it into a php array for later code
-                             //<s toclevel="1" level="2" line="History" number="1" index="1" fromtitle="Seychelles" byteoffset="4678" anchor="History"/>
-                             $last_level = 1;               //keep track of toc levels
-                             $toc_html[] = '<ul>';          //start html list
-                             //$this->url
-                             foreach ($toc_obj->parse->sections->s as $section) {
-                                 $linknumber = 0;
-                                 $linktext = '';
-                                 foreach ($section->attributes() as $a => $b) {
-                                     switch (strtolower($a)) {
-                                         case 'toclevel':
-                                            //echo "'$a' = '$b' Level is at '$last_level'<br/>\n";
-                                            if (intval($b) > $last_level) {         //start a new level list
-                                                $toc_html[] = '<ul>';
-                                            }
-                                            if (intval($b) < $last_level) {     //end old level
-                                                $toc_html[] = '</ul>';
-                                            }
-                                                $last_level = intval($b);
-                                            break;
-                                         case 'number':
-                                            $linknumber = $b;
-                                            break;
-                                         case 'anchor':
-                                            $linktext = $linktext . '<a href="'. $this->url .'#' . $b . '">' . $b . '</a>';
-                                            break;
-                                      }
-                                 }
-                                 $toc_html[] = "<li>$linknumber. $linktext</li>";
-                             }
-                             $toc_html[] = '</ul>';
-                        }
-                        $result = implode("\n",$toc_html);
-                    }else{
-                        //let check if we have a redirect scenario
-                        //echo htmlentities($this->toc);
-                        //most wikipedia pages do have a table of contents f only the references section
-                        // can assume tghis is a redirection
-                        $this->_raiseError('There does not appear to be a table of contents on this page - it may require redirection');
-                    }
-                }
-
-                //
-                //cache the results  - raw and html - this is the specific stuff
-                //
-                if ($result) {
-                    $this->_cache_page($cacheurl,$type,$result);
-                    $this->content = $result;  //we're done        DO WE NEED THIS
-                }
+            //
+            //cache the results  - raw and html - this is the specific stuff
+            //
+            if ($result) {
+                $this->content = $result;  //we're done        DO WE NEED THIS
             }
         }
 
@@ -341,15 +296,9 @@ class WikipediaSnippet {
         //<span class="editsection">[<a href="/w/index.php?title=API&action=edit&section=1" title="Edit section: Dunciad and Moral Essays">edit</a>]</span>
         $html= preg_replace('¬<span class="editsection"(.*?)</span>¬i','',$html);
 
-        //fixup all intenenal wikpedia links
+        //fixup all internal wikpedia links
         $hrefpattern = '¬/wiki/¬i';
         $html = preg_replace($hrefpattern, $this->wiki_content_url, $html);
-
-        //just in case we messed up another wiki's links
-        //http://en.wikipedia.orghttp//en.wikipedia.org/wiki/Help:Cite_errors/Cite_error_refs_without_references
-
-        //remove any citations - links would not work without citations being added
-        //<sup id="cite_ref-0" class="reference"><a target="blank" href="#cite_note-0"><span>[</span>1<span>]</span></a></sup>
 
         //fix up all links - open in new window
         $html =  preg_replace('¬<a href¬i','<a target="blank" href',$html);
@@ -483,48 +432,39 @@ class WikipediaSnippet {
             $tocparms['redirects'] = '';
             $toc_url = $this->_makeWikiAPIcall($tocparms);
 
-            if (!$tocxml = $this->_cache_get($url,$type)) {     //check in cache
-                //if not let's get from wikipedia
-                // toc      = http://en.wikipedia.org/w/api.php?action=parse&prop=sections&format=xml&page=Seychelles
-                if ($this->debugging) error_log("API call being made to '$toc_url'");
+            if ($this->debugging) error_log("API call being made to '$toc_url'");
 
+            if ($tocxml = $this->_getWikiPage($toc_url)) {
+                //raw content is wrapped in xml
+                $this->toc = $tocxml;
 
-                if ($tocxml = $this->_getWikiPage($toc_url)) {
-                    //raw content is wrapped in xml
-                    $this->toc = $tocxml;
-                    //cache our xml
-                    $this->_cache_page($url,$type,$tocxml);
+                if ($this->debugging) error_log("Non Error response returned, XML being turned into object");
 
-                    //error_log($tocxml);
+                if ($toc_obj = $this->_response2XML($tocxml)) {
+                     foreach ($toc_obj->parse->sections->s as $section) {
+                         $anchor = '';
+                         $xindex = 0;  //catch any errors
+                         foreach ($section->attributes() as $a => $b) {
+                             switch (strtolower($a)) {
+                                 case 'anchor':
+                                    $anchor = $b;
+                                    break;
+                                 case 'index':
+                                    $xindex = $b;
+                                    break;
+                             }
 
-                    if ($this->debugging) error_log("Non Error response returned, XML being turned into object");
-
-                    if ($toc_obj = $this->_response2XML($tocxml)) {
-                         foreach ($toc_obj->parse->sections->s as $section) {
-                             $anchor = '';
-                             $xindex = 0;  //catch any errors
-                             foreach ($section->attributes() as $a => $b) {
-                                 switch (strtolower($a)) {
-                                     case 'anchor':
-                                        $anchor = $b;
-                                        break;
-                                     case 'index':
-                                        $xindex = $b;
-                                        break;
-                                 }
-
-                                 if ($anchor && $xindex) {
-                                     $toc_list["$anchor"] = "$xindex";
-                                     break;
-                                 }
+                             if ($anchor && $xindex) {
+                                 $toc_list["$anchor"] = "$xindex";
+                                 break;
                              }
                          }
-                    }
-
-
-                }else{
-                    if ($this->debugging) error_log('TOC XML has not been returned by request');
+                     }
                 }
+
+
+            }else{
+                if ($this->debugging) error_log('TOC XML has not been returned by request');
             }
         }
         return $toc_list;
@@ -541,45 +481,6 @@ class WikipediaSnippet {
         }
     }
 
-    // function to retrieve wikipedia responses
-    // $type can be html,toc, or raw
-    private function _cache_get($url,$type) {
-        if ($this->debugging) error_log("Checking cache");
-        $result = '';
-
-        if ($this->cachingenabled) {            //if caching is on
-            $cache = new PhpCache( $url, $this->cachetime, $type );
-            if ( $cache->check() ) {
-                if ($this->debugging) error_log("Content found in cache - returning");
-                $result = $cache->get();
-                $result = $result['data'];
-            }
-        }
-
-        return $result;
-    }
-
-    //
-    // function will cache an object on disk so that http subsequent calls do not
-    // need to go back to wikipedia - only call this for new/replacement objects
-    //
-    private function _cache_page($url,$type,$content) {
-        if ($this->debugging) error_log("Caching routine starts");
-        $noerror = true;
-
-        if ($this->cachingenabled) {            //if caching is on
-            if ($this->debugging) error_log("Caching results");
-            $cache = new PhpCache( $url, $this->cachetime, $type );
-            $cache->set(
-                array(
-                    'url'=>$url,
-                    'data'=>$content
-                )
-            );
-        }
-        return $noerror;
-    }
-
     //
     // function to get the page from wikipedia and check for errors before returning xml object
     //
@@ -590,7 +491,6 @@ class WikipediaSnippet {
         }
         return($this->_getPagefromWikimedia($url,$postFields));
     }
-
 
     //
     //  function to get the raw content from wikipedia

@@ -1,42 +1,41 @@
-The following steps should get you up and running with
-this module template code.
+Installation Notes
+==================
+Pre-requisites
+==============
+You must have access to the server containing Moodle. This can be direct access, through a network or to a remote server through Internet with an FTP client, you can't do it from "inside" Moodle itself.
 
-* DO NOT PANIC!
+INSTALLATION
+============
+1.  Latest version of the zipped file for this plug is available from git://
 
-* Unzip the archive and read this file
+2.  Unzip the zipped file somewhere on your local computer
 
-* Rename the wikipediasnippet/ folder to the name of your module (eg "widget").
-  The module folder MUST be lower case. You should check the CVS contrib
-  area at http://cvs.moodle.org/contrib/plugins/mod/ to make sure that
-  your name is not already used by an other module.
+3.  Upload the unzipped folder to mod folder in the moodle root folder e.g /var/www/html/ on each of the Moodle servers
 
-* Edit all the files in this directory and its subdirectories and change
-  all the instances of the string "wikipediasnippet" to your module name
-  (eg "widget"). If you are using Linux, you can use the following command
-  $ find . -type f -exec sed -i 's/wikipediasnippet/widget/g' {} \;
+4.  Alternatively the zip file can be uploaded to the folder in step 3 and the zipped file unzipped on the servers.
 
-* Rename the file lang/en/wikipediasnippet.php to lang/en/widget.php
-  where "widget" is the name of your module
+5.  Ensure that the folder has the same permissions and owner as the other folders in the directory -
 
-* Place the widget folder into the /mod folder of the moodle
-  directory.
+    1.  chown -R apache:apache wikipediasnippet
+    2.  chmod -R 755 wikipediasnippet
 
-* Go to Settings > Site Administration > Development > XMLDB editor
-  and modify the module's tables.
+6.  In your browser, go to your Moodle site, login as administrator and choose Site Administration > Notifications  and click on the Continue Button.
 
-* Modify version.php and set the initial version of you module.
+7.  Moodle will report successful completion or any errors.
 
-* Visit Settings > Site Administration > Notifications, you should find
-  the module's tables successfully created
+8.  Click continue and you will be prompted for
+    * The default number of attendees for tutorials - Default is 30
+    * The default locking status - the default is unlocked
+    * Whether the current installation of Moodle is a live service - default is off and should only be on when installed on a live service - this ensure notifications are sent.
 
-* Go to Site Administration > Plugins > Activity modules > Manage activities
-  and you should find that this wikipediasnippet has been added to the list of
-  installed modules.
+9. Click 'Save Changes' and plugin will now be installed.
 
-* You may now proceed to run your own code in an attempt to develop
-  your module. You will probably want to modify mod_form.php and view.php
-  as a first step. Check db/access.php to add capabilities.
+UNINSTALLATION
+==============
+1.  In your browser, go to your Moodle site, login as administrator and choose SiteAdministration -> Plugins -> plugins -> Manage plugins, find the plugin's entry and select 'Delete'
 
-We encourage you to share your code and experience - visit http://moodle.org
+2.  Select 'Continue' on the next page
 
-Good luck!
+3.  Delete the relevant folder /mod/wikipediasnippet from the moodle root e.g. /var/www/html/mod/wikipediasnippet then select Continue in the browser.
+
+4.  The plugin should no longer appear in the list.

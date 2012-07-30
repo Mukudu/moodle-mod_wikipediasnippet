@@ -38,7 +38,7 @@
       Last Updated:  23rd March 2008
    /***************************************************************/
 
-   define('CACHE_PATH', $_SERVER['DOCUMENT_ROOT'].'/moodle22/mod/wikipediasnippet/cache');            //changed by Ben Ellis March 2012 for use with Moodle Plugin
+   define('CACHE_PATH', dirname(dirname(__FILE__)) . '/cache/');            //changed by Ben Ellis March 2012 for use with Moodle Plugin
 
    class PhpCache {
       var $sFile;

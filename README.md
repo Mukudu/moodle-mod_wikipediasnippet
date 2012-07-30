@@ -1,2 +1,0 @@
-moodle-mod_wikipediasnippet
-===========================
