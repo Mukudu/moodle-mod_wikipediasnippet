@@ -31,7 +31,7 @@
 
 require_once(dirname(dirname(dirname(__FILE__))).'/config.php');
 //require_once(dirname(__FILE__).'/lib.php');
-require_once(dirname(__FILE__).'/lib/wikipediasnippet.inc.php');
+require_once(dirname(__FILE__).'/lib/wikipediasnippet/wikipediasnippet.inc.php');
 require_once(dirname(__FILE__).'/lib/PhpCache.php');
 
 $id = optional_param('id', 0, PARAM_INT); // course_module ID, or
